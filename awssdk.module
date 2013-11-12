@@ -47,11 +47,26 @@ function awssdk_config_load() {
     $config = ($cache = cache_get(__FUNCTION__)) ? $cache->data : array();
   }
 
-  if (!$config) {
+  // if drupal is running on an Amazon EC2 instance, the SDK can attempt to
+  // get IAM credentials from the EC2 instance profile. to trigger this behavior,
+  // we add the keys 'use_instance_profile_credentials' => TRUE and
+  // 'default_cache_config' => 'some/local/path' where some/local/path
+  // is a writable path that already exists on the server. We also must omit
+  // the 'key' and 'secret' keys from the credentials.
+  $use_instance_profile = variable_get('aws_use_instance_profile', FALSE);
+
+  $keys = array();
+  if (!$use_instance_profile) {
     $keys = array(
-      // Required keys.
+      // Required keys if using locally saved credentials.
       'key',
       'secret',
+    );
+  }
+
+  if (!$config) {
+    $keys = array_merge($keys, array(
+      // Required keys.
       'account_id',
       'canonical_id',
 
@@ -62,7 +77,7 @@ function awssdk_config_load() {
       'mfa_serial',
       'cloudfront_keypair',
       'cloudfront_pem',
-    );
+    ));
 
     // Look for variables for each key and pull in the values.
     foreach ($keys as $key) {
@@ -71,12 +86,9 @@ function awssdk_config_load() {
       }
     }
 
-    // Merge required defaults.
-    $config += array(
-      'default_cache_config' => '',
-      'certificate_authority' => FALSE,
-    );
-
+    if ($use_instance_profile) {
+      $config['use_instance_profile_credentials'] = TRUE;
+    }
     cache_set(__FUNCTION__, $config);
   }
 
